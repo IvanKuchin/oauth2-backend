@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"strings"
@@ -50,10 +51,11 @@ type JWTValidator struct {
 	keys     map[string]*rsa.PublicKey
 	ctx      context.Context
 	cancel   context.CancelFunc
+	logger   *slog.Logger
 }
 
 // NewJWTValidator creates a new JWT validator
-func NewJWTValidator(issuer, audience, domain string) *JWTValidator {
+func NewJWTValidator(issuer, audience, domain string, logger *slog.Logger) (*JWTValidator, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	jwksURL := fmt.Sprintf("https://%s/.well-known/jwks.json", domain)
 	validator := &JWTValidator{
@@ -63,15 +65,18 @@ func NewJWTValidator(issuer, audience, domain string) *JWTValidator {
 		keys:     make(map[string]*rsa.PublicKey),
 		ctx:      ctx,
 		cancel:   cancel,
+		logger:   logger,
 	}
 
 	// Load keys initially
-	validator.loadJWKS()
+	if err := validator.loadJWKS(); err != nil {
+		return nil, fmt.Errorf("failed to load JWKS initially: %w", err)
+	}
 
 	// Refresh keys periodically
 	go validator.refreshKeys()
 
-	return validator
+	return validator, nil
 }
 
 // ValidateToken validates a JWT token
@@ -143,12 +148,12 @@ func (v *JWTValidator) validateClaims(claims *Claims) error {
 
 	// Check expiration
 	if claims.ExpiresAt < now {
-		return fmt.Errorf("token expired")
+		return fmt.Errorf("token expired at %d", claims.ExpiresAt)
 	}
 
 	// Check issuer
 	if claims.Issuer != v.issuer {
-		return fmt.Errorf("invalid issuer")
+		return fmt.Errorf("invalid issuer %s", claims.Issuer)
 	}
 
 	// Check audience
@@ -160,7 +165,7 @@ func (v *JWTValidator) validateClaims(claims *Claims) error {
 		}
 	}
 	if !validAudience {
-		return fmt.Errorf("invalid audience")
+		return fmt.Errorf("invalid audience %v", claims.Audience)
 	}
 
 	return nil
@@ -185,7 +190,7 @@ func (v *JWTValidator) loadJWKS() error {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to read JWKS: %w", err)
+		return fmt.Errorf("failed to read JWKS from http response body: %w", err)
 	}
 
 	var jwks JWKS
@@ -223,6 +228,9 @@ func (v *JWTValidator) jwkToRSAPublicKey(jwk JWK) (*rsa.PublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(eBytes) >= 8 {
+		return nil, fmt.Errorf("invalid exponent length, expected less than 8 bytes")
+	}
 
 	n := new(big.Int).SetBytes(nBytes)
 	e := 0
@@ -246,7 +254,9 @@ func (v *JWTValidator) refreshKeys() {
 		case <-v.ctx.Done():
 			return
 		case <-ticker.C:
-			v.loadJWKS()
+			if err := v.loadJWKS(); err != nil {
+				v.logger.Error("failed to refresh JWKS", "error", err)
+			}
 		}
 	}
 }

@@ -41,11 +41,17 @@ func main() {
 	oauthClient := oauth.NewClient(&cfg.Auth0)
 
 	// Initialize JWT validator
-	jwtValidator := oauth.NewJWTValidator(
+	jwtValidator, err := oauth.NewJWTValidator(
 		cfg.Auth0.Issuer,
 		cfg.Auth0.Audience,
 		cfg.Auth0.Domain,
+		logger,
 	)
+	if err != nil {
+		logger.Error("Failed to initialize JWT validator", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("OAuth client and JWT validator initialized")
 
 	// Initialize handlers
 	oauthHandler := handlers.NewOAuthHandler(oauthClient, cfg, logger)
