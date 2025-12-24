@@ -92,8 +92,12 @@ func main() {
 	})
 
 	// Apply middleware stack
-	handler := middleware.LoggingMiddleware(logger, mux)
-	handler = middleware.CORSMiddleware([]string{cfg.Frontend.URL, "*"}, handler)
+	handler :=
+		middleware.LoggingMiddleware(logger)(
+			middleware.CORSMiddleware([]string{cfg.Frontend.URL, "*"})(
+				mux,
+			),
+		)
 
 	// Create HTTP server
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)

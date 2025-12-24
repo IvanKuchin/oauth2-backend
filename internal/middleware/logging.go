@@ -7,28 +7,30 @@ import (
 )
 
 // LoggingMiddleware logs HTTP requests
-func LoggingMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
+func LoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
 
-		// Create a response writer wrapper to capture status code
-		wrapped := &responseWriter{
-			ResponseWriter: w,
-			statusCode:     http.StatusOK,
-		}
+			// Create a response writer wrapper to capture status code
+			wrapped := &responseWriter{
+				ResponseWriter: w,
+				statusCode:     http.StatusOK,
+			}
 
-		// Call the next handler
-		next.ServeHTTP(wrapped, r)
+			// Call the next handler
+			next.ServeHTTP(wrapped, r)
 
-		// Log the request
-		logger.Info("HTTP request",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"remote_addr", r.RemoteAddr,
-			"status", wrapped.statusCode,
-			"duration_ms", time.Since(start).Milliseconds(),
-		)
-	})
+			// Log the request
+			logger.Info("HTTP request",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"remote_addr", r.RemoteAddr,
+				"status", wrapped.statusCode,
+				"duration_ms", time.Since(start).Milliseconds(),
+			)
+		})
+	}
 }
 
 // responseWriter wraps http.ResponseWriter to capture status code
