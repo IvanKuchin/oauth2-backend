@@ -108,7 +108,10 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*Claims, error) {
 
 	if !exists {
 		// Try to refresh keys
-		v.loadJWKS()
+		if err := v.loadJWKS(); err != nil {
+			return nil, fmt.Errorf("failed to refresh JWKS: %w", err)
+		}
+
 		v.mu.RLock()
 		pubKey, exists = v.keys[header.Kid]
 		v.mu.RUnlock()
