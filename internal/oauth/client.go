@@ -91,13 +91,17 @@ func (c *Client) ExchangeCode(code, codeVerifier, redirectURI string) (*TokenRes
 	data := url.Values{}
 	data.Set("grant_type", "authorization_code")
 	data.Set("client_id", c.provider.GetClientID())
-	data.Set("client_secret", c.provider.GetClientSecret())
 	data.Set("code", code)
 	data.Set("redirect_uri", redirectURI)
 
 	// Add PKCE verifier if provider supports it and verifier is provided
 	if c.provider.SupportsPKCE() && codeVerifier != "" {
 		data.Set("code_verifier", codeVerifier)
+	} else if c.provider.SupportsPKCE() && codeVerifier == "" {
+		return nil, fmt.Errorf("code_verifier is required for PKCE")
+	} else {
+		// Add client secret for non-PKCE providers
+		data.Set("client_secret", c.provider.GetClientSecret())
 	}
 
 	req, err := http.NewRequest("POST", tokenURL, bytes.NewBufferString(data.Encode()))
