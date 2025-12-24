@@ -91,9 +91,6 @@ func Load() (*Config, error) {
 	if cfg.OAuth.ClientID == "" {
 		return nil, fmt.Errorf("OAUTH_CLIENT_ID is required")
 	}
-	if cfg.OAuth.ClientSecret == "" {
-		return nil, fmt.Errorf("OAUTH_CLIENT_SECRET is required")
-	}
 	if cfg.OAuth.CallbackURL == "" {
 		return nil, fmt.Errorf("OAUTH_CALLBACK_URL is required")
 	}
