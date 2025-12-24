@@ -14,13 +14,13 @@ import (
 	"github.com/ikuchin/oauth2-backend/internal/config"
 )
 
-// Client represents an OAuth client for Auth0
+// Client represents an OAuth client
 type Client struct {
-	config *config.Auth0Config
-	mu     sync.RWMutex
-	states map[string]StateData // Store state with PKCE verifier
-	ctx    context.Context
-	cancel context.CancelFunc
+	provider Provider
+	mu       sync.RWMutex
+	states   map[string]StateData // Store state with PKCE verifier
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 // StateData holds state information for OAuth flow
@@ -39,13 +39,15 @@ type TokenResponse struct {
 }
 
 // NewClient creates a new OAuth client
-func NewClient(cfg *config.Auth0Config) *Client {
+func NewClient(cfg *config.OAuthConfig) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
+	provider := newProvider(cfg)
+
 	client := &Client{
-		config: cfg,
-		states: make(map[string]StateData),
-		ctx:    ctx,
-		cancel: cancel,
+		provider: provider,
+		states:   make(map[string]StateData),
+		ctx:      ctx,
+		cancel:   cancel,
 	}
 
 	// Start cleanup goroutine for expired states
@@ -54,7 +56,7 @@ func NewClient(cfg *config.Auth0Config) *Client {
 	return client
 }
 
-// GetAuthorizationURL generates the Auth0 authorization URL
+// GetAuthorizationURL generates the OAuth authorization URL
 func (c *Client) GetAuthorizationURL(state, codeChallenge, redirectURI string) string {
 	// Store state for validation
 	c.mu.Lock()
@@ -64,25 +66,7 @@ func (c *Client) GetAuthorizationURL(state, codeChallenge, redirectURI string) s
 	}
 	c.mu.Unlock()
 
-	params := url.Values{}
-	params.Set("response_type", "code")
-	params.Set("client_id", c.config.ClientID)
-	params.Set("redirect_uri", redirectURI)
-	params.Set("scope", "openid profile email")
-	params.Set("state", state)
-	params.Set("audience", c.config.Audience)
-
-	// Add PKCE parameters
-	if codeChallenge != "" {
-		params.Set("code_challenge", codeChallenge)
-		params.Set("code_challenge_method", "S256")
-	}
-
-	authURL := fmt.Sprintf("https://%s/authorize?%s",
-		c.config.Domain,
-		params.Encode())
-
-	return authURL
+	return c.provider.GetAuthorizationURL(state, codeChallenge, redirectURI)
 }
 
 // ValidateState checks if the state is valid
@@ -102,17 +86,17 @@ func (c *Client) RemoveState(state string) {
 
 // ExchangeCode exchanges authorization code for access token
 func (c *Client) ExchangeCode(code, codeVerifier, redirectURI string) (*TokenResponse, error) {
-	tokenURL := fmt.Sprintf("https://%s/oauth/token", c.config.Domain)
+	tokenURL := c.provider.GetTokenURL()
 
 	data := url.Values{}
 	data.Set("grant_type", "authorization_code")
-	data.Set("client_id", c.config.ClientID)
-	data.Set("client_secret", c.config.ClientSecret)
+	data.Set("client_id", c.provider.GetClientID())
+	data.Set("client_secret", c.provider.GetClientSecret())
 	data.Set("code", code)
 	data.Set("redirect_uri", redirectURI)
 
-	// Add PKCE verifier if provided
-	if codeVerifier != "" {
+	// Add PKCE verifier if provider supports it and verifier is provided
+	if c.provider.SupportsPKCE() && codeVerifier != "" {
 		data.Set("code_verifier", codeVerifier)
 	}
 
@@ -122,6 +106,7 @@ func (c *Client) ExchangeCode(code, codeVerifier, redirectURI string) (*TokenRes
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)

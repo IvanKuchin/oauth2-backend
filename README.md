@@ -1,15 +1,22 @@
 # OAuth 2.0 Backend Demo
 
-A simple OAuth 2.0 backend implementation in Go using only the standard library, with Auth0 as the identity provider.
+A flexible OAuth 2.0 backend implementation in Go using only the standard library, supporting multiple identity providers including Auth0, Google, GitHub, and any generic OAuth 2.0 provider.
 
 ## Features
 
 - OAuth 2.0 Authorization Code Flow with PKCE
-- Auth0 integration for identity management
+- Multi-provider support (Auth0, Google, GitHub, custom providers)
 - JWT token validation
 - Public, protected, and admin API endpoints
 - CORS support for frontend integration
 - Structured logging with slog
+
+## Supported Identity Providers
+
+- **Auth0** - Full OAuth 2.0 + OIDC support with JWT validation
+- **Google** - OAuth 2.0 with JWT validation
+- **GitHub** - OAuth 2.0 (opaque tokens, no JWT)
+- **Generic** - Any OAuth 2.0 compatible provider
 
 ## Project Structure
 
@@ -42,16 +49,66 @@ A simple OAuth 2.0 backend implementation in Go using only the standard library,
 
 1. **Clone the repository**
 
-2. **Configure Auth0**
+2. **Configure Identity Provider**
+   
+   Choose your OAuth provider and configure accordingly:
+
+   ### Auth0
    - Create an Auth0 account at https://auth0.com
    - Create a new Application (Regular Web Application)
    - Create an API in Auth0 for your backend
    - Note down: Domain, Client ID, Client Secret, and API Identifier
 
+   ### Google
+   - Go to Google Cloud Console (https://console.cloud.google.com)
+   - Create a new project or select existing one
+   - Enable Google+ API
+   - Create OAuth 2.0 credentials (Web application)
+   - Note down: Client ID and Client Secret
+   - Add authorized redirect URI: `http://localhost:3000/callback`
+
+   ### GitHub
+   - Go to GitHub Settings → Developer settings → OAuth Apps
+   - Create a new OAuth App
+   - Note down: Client ID and Client Secret
+   - Set Authorization callback URL: `http://localhost:3000/callback`
+
+   ### Generic OAuth Provider
+   - Obtain OAuth credentials from your provider
+   - Get the authorization, token, and JWKS endpoints
+
 3. **Configure environment variables**
    ```bash
    cp .env.example .env
-   # Edit .env with your Auth0 credentials
+   # Edit .env with your provider credentials
+   ```
+
+   Example for Auth0:
+   ```bash
+   OAUTH_PROVIDER=auth0
+   OAUTH_DOMAIN=your-tenant.auth0.com
+   OAUTH_CLIENT_ID=your-client-id
+   OAUTH_CLIENT_SECRET=your-client-secret
+   OAUTH_AUDIENCE=https://your-api-identifier
+   OAUTH_CALLBACK_URL=http://localhost:3000/callback
+   ```
+
+   Example for Google:
+   ```bash
+   OAUTH_PROVIDER=google
+   OAUTH_DOMAIN=accounts.google.com
+   OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
+   OAUTH_CLIENT_SECRET=your-client-secret
+   OAUTH_CALLBACK_URL=http://localhost:3000/callback
+   ```
+
+   Example for GitHub:
+   ```bash
+   OAUTH_PROVIDER=github
+   OAUTH_DOMAIN=github.com
+   OAUTH_CLIENT_ID=your-client-id
+   OAUTH_CLIENT_SECRET=your-client-secret
+   OAUTH_CALLBACK_URL=http://localhost:3000/callback
    ```
 
 4. **Install Go** (version 1.21 or higher)
@@ -107,12 +164,38 @@ curl -H "Authorization: Bearer YOUR_ADMIN_ACCESS_TOKEN" \
 ## OAuth Flow
 
 1. Frontend redirects user to `/api/v1/oauth2/authorize` with PKCE parameters
-2. Backend redirects to Auth0 login page
-3. User authenticates with Auth0
-4. Auth0 redirects back to frontend callback URL with authorization code
+2. Backend redirects to the configured identity provider's login page
+3. User authenticates with the identity provider
+4. Provider redirects back to frontend callback URL with authorization code
 5. Frontend sends code to `/api/v1/oauth2/token`
-6. Backend exchanges code with Auth0 and returns access token
+6. Backend exchanges code with provider and returns access token
 7. Frontend uses access token for API requests
+
+## Provider-Specific Notes
+
+### Auth0
+- Supports PKCE
+- Returns JWT tokens
+- Full JWT validation with JWKS
+- Supports custom scopes and permissions
+
+### Google
+- Supports PKCE
+- Returns JWT tokens (ID tokens)
+- JWT validation with Google's JWKS
+- Standard scopes: `openid profile email`
+
+### GitHub
+- Does not support PKCE
+- Returns opaque access tokens (not JWT)
+- No JWT validation (tokens verified via GitHub API)
+- Standard scopes: `read:user user:email`
+
+### Generic Provider
+- Configurable endpoints
+- Optional PKCE support
+- Optional JWT validation (if JWKS endpoint provided)
+- Customizable scopes
 
 ## Security Features
 

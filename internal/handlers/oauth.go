@@ -51,7 +51,7 @@ func (h *OAuthHandler) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if redirectURI == "" {
-		redirectURI = h.config.Auth0.CallbackURL
+		redirectURI = h.config.OAuth.CallbackURL
 	}
 
 	h.logger.Info("Authorization request received",
@@ -119,7 +119,7 @@ func (h *OAuthHandler) HandleToken(w http.ResponseWriter, r *http.Request) {
 	// Use configured callback URL if not provided
 	redirectURI := req.RedirectURI
 	if redirectURI == "" {
-		redirectURI = h.config.Auth0.CallbackURL
+		redirectURI = h.config.OAuth.CallbackURL
 	}
 
 	h.logger.Info("Token exchange request received",

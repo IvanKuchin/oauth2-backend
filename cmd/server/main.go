@@ -35,16 +35,17 @@ func main() {
 	logger.Info("Configuration loaded successfully",
 		"server_host", cfg.Server.Host,
 		"server_port", cfg.Server.Port,
-		"auth0_domain", cfg.Auth0.Domain)
+		"oauth_provider", cfg.OAuth.Provider,
+		"oauth_domain", cfg.OAuth.Domain)
 
 	// Initialize OAuth client
-	oauthClient := oauth.NewClient(&cfg.Auth0)
+	oauthClient := oauth.NewClient(&cfg.OAuth)
 
 	// Initialize JWT validator
 	jwtValidator, err := oauth.NewJWTValidator(
-		cfg.Auth0.Issuer,
-		cfg.Auth0.Audience,
-		cfg.Auth0.Domain,
+		cfg.OAuth.Issuer,
+		cfg.OAuth.Audience,
+		cfg.OAuth.JWKSEndpoint,
 		logger,
 	)
 	if err != nil {

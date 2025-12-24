@@ -55,9 +55,23 @@ type JWTValidator struct {
 }
 
 // NewJWTValidator creates a new JWT validator
-func NewJWTValidator(issuer, audience, domain string, logger *slog.Logger) (*JWTValidator, error) {
+func NewJWTValidator(issuer, audience, jwksURL string, logger *slog.Logger) (*JWTValidator, error) {
+	// Skip JWT validation if no JWKS endpoint is provided (e.g., for GitHub)
+	if jwksURL == "" {
+		logger.Warn("No JWKS endpoint provided, JWT validation will be disabled")
+		ctx, cancel := context.WithCancel(context.Background())
+		return &JWTValidator{
+			issuer:   issuer,
+			audience: audience,
+			jwksURL:  "",
+			keys:     make(map[string]*rsa.PublicKey),
+			ctx:      ctx,
+			cancel:   cancel,
+			logger:   logger,
+		}, nil
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
-	jwksURL := fmt.Sprintf("https://%s/.well-known/jwks.json", domain)
 	validator := &JWTValidator{
 		issuer:   issuer,
 		audience: audience,
@@ -81,6 +95,13 @@ func NewJWTValidator(issuer, audience, domain string, logger *slog.Logger) (*JWT
 
 // ValidateToken validates a JWT token
 func (v *JWTValidator) ValidateToken(tokenString string) (*Claims, error) {
+	// Skip validation if no JWKS endpoint (e.g., GitHub OAuth tokens)
+	if v.jwksURL == "" {
+		return &Claims{
+			Subject: "unknown",
+		}, nil
+	}
+
 	// Split token into parts
 	parts := strings.Split(tokenString, ".")
 	if len(parts) != 3 {
@@ -182,8 +203,12 @@ func (v *JWTValidator) verifySignature(message, signature string, pubKey *rsa.Pu
 	return nil
 }
 
-// loadJWKS loads JSON Web Key Set from Auth0
+// loadJWKS loads JSON Web Key Set from the provider
 func (v *JWTValidator) loadJWKS() error {
+	if v.jwksURL == "" {
+		return nil // Skip if no JWKS endpoint
+	}
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(v.jwksURL)
 	if err != nil {
@@ -232,7 +257,7 @@ func (v *JWTValidator) jwkToRSAPublicKey(jwk JWK) (*rsa.PublicKey, error) {
 		return nil, err
 	}
 	if len(eBytes) >= 8 {
-		return nil, fmt.Errorf("invalid exponent length, expected less than 8 bytes")
+		return nil, fmt.Errorf("invalid exponent length in RSA public key from JWKS %s, expected less than 8 bytes", jwk.Kid)
 	}
 
 	n := new(big.Int).SetBytes(nBytes)
