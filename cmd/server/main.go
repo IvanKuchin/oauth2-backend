@@ -121,6 +121,7 @@ func main() {
 	logger.Info("Server is ready to handle requests", "address", addr)
 
 	// Wait for interrupt signal to gracefully shutdown the server
+	// Using a buffered channel (size 1) avoids races and blocked signal delivery.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -137,6 +138,7 @@ func main() {
 
 	if err := server.Shutdown(ctx); err != nil {
 		logger.Error("Server forced to shutdown", "error", err)
+		cancel()
 		os.Exit(1)
 	}
 
