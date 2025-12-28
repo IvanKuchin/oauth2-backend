@@ -126,8 +126,6 @@ func (h *OAuthHandler) HandleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logger.Info("Token exchange successful", "received token", tokenResp)
-
 	// Return token response
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(tokenResp)

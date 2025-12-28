@@ -39,7 +39,7 @@ func main() {
 		"oauth_domain", cfg.OAuth.Domain)
 
 	// Initialize OAuth client
-	oauthClient := oauth.NewClient(&cfg.OAuth)
+	oauthClient := oauth.NewClient(&cfg.OAuth, logger)
 
 	// Initialize JWT validator
 	jwtValidator, err := oauth.NewJWTValidator(

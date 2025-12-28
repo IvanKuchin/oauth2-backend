@@ -3,11 +3,14 @@ package oauth
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +24,7 @@ type Client struct {
 	states   map[string]StateData // Store state with PKCE verifier
 	ctx      context.Context
 	cancel   context.CancelFunc
+	logger   slog.Logger
 }
 
 // StateData holds state information for OAuth flow
@@ -36,10 +40,29 @@ type TokenResponse struct {
 	ExpiresIn    int    `json:"expires_in"`
 	RefreshToken string `json:"refresh_token,omitempty"`
 	Scope        string `json:"scope,omitempty"`
+	IDToken      string `json:"id_token,omitempty"` // OpenID Connect identity token
+}
+
+// IDTokenClaims represents the claims contained in an OpenID Connect ID token
+type IDTokenClaims struct {
+	GivenName     string `json:"given_name"`
+	FamilyName    string `json:"family_name"`
+	Nickname      string `json:"nickname"`
+	Name          string `json:"name"`
+	Picture       string `json:"picture"`
+	UpdatedAt     string `json:"updated_at"`
+	Email         string `json:"email"`
+	EmailVerified bool   `json:"email_verified"`
+	Issuer        string `json:"iss"`           // Issuer
+	Audience      string `json:"aud"`           // Audience
+	Subject       string `json:"sub"`           // Subject (user identifier)
+	IssuedAt      int64  `json:"iat"`           // Issued at timestamp
+	ExpiresAt     int64  `json:"exp"`           // Expiration timestamp
+	SessionID     string `json:"sid,omitempty"` // Session ID
 }
 
 // NewClient creates a new OAuth client
-func NewClient(cfg *config.OAuthConfig) *Client {
+func NewClient(cfg *config.OAuthConfig, logger *slog.Logger) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	provider := newProvider(cfg)
 
@@ -48,6 +71,7 @@ func NewClient(cfg *config.OAuthConfig) *Client {
 		states:   make(map[string]StateData),
 		ctx:      ctx,
 		cancel:   cancel,
+		logger:   *logger,
 	}
 
 	// Start cleanup goroutine for expired states
@@ -134,6 +158,38 @@ func (c *Client) ExchangeCode(code, codeVerifier, redirectURI string) (*TokenRes
 	}
 
 	return &tokenResp, nil
+}
+
+// ParseIDToken parses the JWT ID token and extracts claims
+func (c *Client) ParseIDToken(idToken string) (*IDTokenClaims, error) {
+	if idToken == "" {
+		return nil, fmt.Errorf("id_token is empty")
+	}
+
+	// JWT tokens have three parts separated by dots: header.payload.signature
+	parts := strings.Split(idToken, ".")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("invalid JWT token format")
+	}
+
+	// Decode the payload (second part)
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode JWT payload: %w", err)
+	}
+
+	// Parse the JSON payload
+	var claims IDTokenClaims
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return nil, fmt.Errorf("failed to parse ID token claims: %w", err)
+	}
+
+	c.logger.Info("ID token parsed successfully",
+		"subject", claims.Subject,
+		"email", claims.Email,
+		"name", claims.Name)
+
+	return &claims, nil
 }
 
 // cleanupStates removes expired states (older than 10 minutes)
