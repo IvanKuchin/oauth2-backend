@@ -79,12 +79,18 @@ func (h *OAuthHandler) HandleToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
 	var req TokenRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.logger.Error("Failed to decode request", "error", err)
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	if err := r.ParseForm(); err != nil {
+		h.logger.Error("Failed to parse form", "error", err)
+		http.Error(w, "Invalid form data", http.StatusBadRequest)
 		return
+	}
+
+	req = TokenRequest{
+		Code:         r.PostFormValue("code"),
+		CodeVerifier: r.PostFormValue("code_verifier"),
+		RedirectURI:  r.PostFormValue("redirect_uri"),
+		State:        r.PostFormValue("state"),
 	}
 
 	// Validate required fields
