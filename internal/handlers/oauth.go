@@ -106,19 +106,6 @@ func (h *OAuthHandler) HandleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.State == "" {
-		h.logger.Error("Missing state parameter")
-		http.Error(w, "Missing state parameter", http.StatusBadRequest)
-		return
-	}
-
-	// Validate state
-	if !h.client.ValidateState(req.State) {
-		h.logger.Error("Invalid state parameter", "state", req.State)
-		http.Error(w, "Invalid state parameter", http.StatusBadRequest)
-		return
-	}
-
 	// Remove state after validation
 	h.client.RemoveState(req.State)
 
