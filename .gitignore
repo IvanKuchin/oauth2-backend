@@ -14,7 +14,7 @@ dist/
 *.out
 
 # Environment variables
-.env
+#.env
 
 # IDE
 .idea/
